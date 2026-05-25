@@ -140,6 +140,31 @@ Fast path — recover only files deleted across all commits in all repos.
 uv run --with dulwich git_forensics.py <evidence_root> --deleted <output_dir>
 ```
 
+### Recreate missing HEAD
+
+KAPE sometimes omits the `HEAD` file (locked during collection, or not listed in the target mask). Without it, `git log` reports _"your current branch does not have any commits yet"_ even though the repo is intact.
+
+This option writes a valid `HEAD` back so native git tools work:
+
+```bash
+uv run --with dulwich git_forensics.py <evidence_root> --recreate-head
+```
+
+```
+======================================================================
+WARNING: --recreate-head MODIFIES the .git directory.
+Run this on a working COPY of evidence, not the original.
+======================================================================
+
+  [pdftoolkit] HEAD exists (ref: refs/heads/master) -- skipped
+  [webpage] HEAD recreated -> refs/heads/master  (082f2abb)
+             git log: git -C "evidence\webpage" -c safe.directory="*" log --oneline
+```
+
+Branch selection order: `master` → `main` → first branch alphabetically.
+
+> **Forensic note**: this modifies the `.git` directory. Always work on a copy (`xcopy /e /h /i evidence\ working_copy\`) — never run on original evidence.
+
 ---
 
 ## Output: commit file format
@@ -184,7 +209,7 @@ Diff: app_logs.json
 - **Merge commits**: diffs against first parent only (standard forensic convention)
 - **Shallow clones**: detected and flagged; history will be incomplete
 - **Empty repos**: repos with no commits (objects not collected by acquisition tool) report an error and continue
-- **Read-only**: tool never modifies evidence
+- **Read-only**: tool never modifies evidence except when `--recreate-head` is explicitly passed
 
 ---
 
