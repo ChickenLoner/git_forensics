@@ -8,16 +8,21 @@ Built for evidence collected via [KAPE](https://www.kroll.com/en/services/cyber-
 
 ## Why not just use git?
 
-When KAPE collects a `.git` directory from a target machine, running `git log` on the collected evidence fails:
+When KAPE collects a `.git` directory from a target machine, running `git log` on the collected evidence commonly fails with one of:
 
 ```
-fatal: not a git repository         # run from outside the dir
-your current branch 'master' does not have any commits yet  # run from inside
+fatal: not a git repository                                    # safe.directory rejection
+your current branch 'master' does not have any commits yet    # HEAD missing from collection
 ```
 
-Root cause: Git 2.35+ safe.directory enforcement + NTFS ownership mismatch on the analysis machine. Even `-c safe.directory='*'` does not fully resolve it.
+There are two distinct failure modes:
 
-**git_forensics** bypasses the git binary entirely using [dulwich](https://www.dulwich.io/) (pure Python git implementation) and reads object files directly.
+| Failure | Cause | Fix |
+|---------|-------|-----|
+| `not a git repository` | Git 2.35+ rejects repos owned by a different user (NTFS SID mismatch) | `git -c safe.directory='*' log` |
+| `does not have any commits yet` | KAPE did not collect the `HEAD` file (locked at collection time, or missing from target mask) | `--recreate-head` then `git -c safe.directory='*' log` |
+
+Both are fixable on a working copy — but they require manual diagnosis and modify the evidence directory. **git_forensics** bypasses the git binary entirely using [dulwich](https://www.dulwich.io/) (pure Python git implementation), reads object files directly, and works on read-only collected evidence without any reconstruction.
 
 ---
 
