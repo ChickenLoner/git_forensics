@@ -683,6 +683,41 @@ def extract_deleted(repos: list[RepoInfo], out_root: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Recreate HEAD
+# ---------------------------------------------------------------------------
+
+def recreate_head(repos: list[RepoInfo]) -> None:
+    print("=" * 70)
+    print("WARNING: --recreate-head MODIFIES the .git directory.")
+    print("Run this on a working COPY of evidence, not the original.")
+    print("=" * 70)
+    print()
+
+    for info in repos:
+        head_path = info.path / ".git" / "HEAD"
+
+        if head_path.exists():
+            print(f"  [{info.name}] HEAD exists ({head_path.read_text().strip()}) -- skipped")
+            continue
+
+        branches = get_all_branch_shas(info.repo)
+        if not branches:
+            print(f"  [{info.name}] no branches found -- cannot recreate HEAD")
+            continue
+
+        branch = (
+            "master" if "master" in branches else
+            "main"   if "main"   in branches else
+            sorted(branches.keys())[0]
+        )
+
+        head_path.write_text(f"ref: refs/heads/{branch}\n", encoding="ascii")
+        tip = branches[branch].decode() if isinstance(branches[branch], bytes) else branches[branch]
+        print(f"  [{info.name}] HEAD recreated -> refs/heads/{branch}  ({tip[:8]})")
+        print(f"             git log: git -C \"{info.path}\" -c safe.directory=\"*\" log --oneline")
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -695,6 +730,8 @@ def main() -> None:
     parser.add_argument("evidence_root", help="Root of KAPE evidence directory")
     parser.add_argument("--extract", metavar="OUTDIR", help="Full forensic extraction to directory")
     parser.add_argument("--deleted", metavar="OUTDIR", help="Recover only deleted files to directory")
+    parser.add_argument("--recreate-head", action="store_true",
+                        help="Recreate missing HEAD files so native git works (MODIFIES .git -- use on working copy only)")
     args = parser.parse_args()
 
     root = Path(args.evidence_root)
@@ -717,7 +754,9 @@ def main() -> None:
 
     print()
 
-    if args.extract:
+    if args.recreate_head:
+        recreate_head(repos)
+    elif args.extract:
         extract_repos(repos, Path(args.extract))
     elif args.deleted:
         extract_deleted(repos, Path(args.deleted))
